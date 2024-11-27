@@ -20,12 +20,33 @@ import ipynb
 import wandb
 import importlib
 
+
+#Begin add -----------------------------------------------------------------------------------------
+import os,argparse
+parser = argparse.ArgumentParser(description="List files in a directory that start with a given keyword.")
+# Add the arguments
+parser.add_argument('--directory', type=str, default="VAE_ML1M_0.0007_128_10.pt", nargs='?')
+parser.add_argument('--model', type=str, default="VAE", nargs='?')
+parser.add_argument('--lambda_pos', type=float, default=35, nargs='?')
+parser.add_argument('--lambda_neg', type=float, default=7, nargs='?')
+parser.add_argument('--alpha', type=int, default=1, nargs='?')
+parser.add_argument('--learning_rate', type=float, default=0.004, nargs='?')
+parser.add_argument('--trial', type=int, default=0 , nargs='?')
+parser.add_argument('--whereSaved', type=str, default='', nargs='?')
+# Parse the arguments
+args = parser.parse_args()
+recommender_name = args.model
+# End add -----------------------------------------------------------------------------------------
+
+
 data_name = "ML1M" ### Can be ML1M, Yahoo, Pinterest
-recommender_name = "MLP" ## Can be MLP, VAE
+recommender_name = "VAE" ## Can be MLP, VAE
+print(f'------ Runnig {recommender_name} on {data_name} -----------')
 DP_DIR = Path("processed_data", data_name) 
 export_dir = Path(os.getcwd())
 files_path = Path(export_dir, "processed_data", data_name)
 checkpoints_path = Path(export_dir, "checkpoints")
+Neucheckpoints_path = Path(export_dir, "Neucheckpoints")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 output_type_dict = {
@@ -48,7 +69,7 @@ num_items_dict = {
 
 
 recommender_path_dict = {
-    ("ML1M","VAE"): Path(checkpoints_path, "VAE_ML1M_0.0007_128_10.pt"),
+    ("ML1M","VAE"): Path(Neucheckpoints_path, f"Sel1/{args.directory}" ),
     ("ML1M","MLP"):Path(checkpoints_path, "MLP1_ML1M_0.0076_256_7.pt"),
     
     ("Yahoo","VAE"): Path(checkpoints_path, "VAE_Yahoo_0.0001_128_13.pt"),
@@ -112,7 +133,7 @@ importlib.reload(ipynb.fs.defs.recommenders_architecture)
 from ipynb.fs.defs.recommenders_architecture import *
 
 VAE_config= {
-"enc_dims": [512,128],
+"enc_dims": [256,64],
 "dropout": 0.5,
 "anneal_cap": 0.2,
 "total_anneal_steps": 200000
@@ -141,7 +162,7 @@ from ipynb.fs.defs.help_functions import *
 
 # ## Load / create top recommended items dict
 
-create_dicts = False
+create_dicts = True
 if create_dicts:
     top1_train = {}
     top1_test = {}
@@ -281,13 +302,33 @@ random_sampled_array = test_array[random_rows]
 
 def lxr_training(trial):
     
-    learning_rate = trial.suggest_float('learning_rate', 0.001, 0.01)
-    alpha = trial.suggest_categorical('alpha', [1]) # set alpha to be 1, change other hyperparameters
-    lambda_neg = trial.suggest_float('lambda_neg', 0,50)
-    lambda_pos = trial.suggest_float('lambda_pos', 0,50)
-    batch_size = trial.suggest_categorical('batch_size', [32,64,128,256])
-    explainer_hidden_size = trial.suggest_categorical('explainer_hidden_size', [32,64,128])
-    epochs = 40
+    # learning_rate = trial.suggest_float('learning_rate', 0.001, 0.01)
+    # alpha = trial.suggest_categorical('alpha', [1]) # set alpha to be 1, change other hyperparameters
+    # lambda_neg = trial.suggest_float('lambda_neg', 0,50)
+    # lambda_pos = trial.suggest_float('lambda_pos', 0,50)
+    if bool(args.trial):
+        print('Optuna trial')
+        learning_rate = trial.suggest_float('learning_rate', 0.003, 0.006)
+        alpha = trial.suggest_categorical('alpha', [1]) # set alpha to be 1, change other hyperparameters
+        lambda_neg = trial.suggest_float('lambda_neg', 7,10)
+        lambda_pos = trial.suggest_float('lambda_pos', 32,39)
+    else:
+        print('Manual trial')
+        learning_rate = args.learning_rate
+        alpha = args.alpha
+        lambda_neg = args.lambda_neg
+        lambda_pos = args.lambda_pos
+
+    print(f'model is {args.directory}')
+
+
+    batch_size = trial.suggest_categorical('batch_size', [128])
+    explainer_hidden_size = trial.suggest_categorical('explainer_hidden_size', [128])
+
+    # batch_size = trial.suggest_categorical('batch_size', [32,64,128,256])
+    # explainer_hidden_size = trial.suggest_categorical('explainer_hidden_size', [32,64,128])
+    # epochs = 40 
+    epochs = 25
     
     wandb.init(
         project=f"{data_name}_{recommender_name}_LXR_training",
@@ -323,6 +364,9 @@ def lxr_training(trial):
     loss_func = LXR_loss(lambda_pos, lambda_neg, alpha)
 
     print('======================== new run ========================')
+    print(f'Start with lambda_pos = {lambda_pos}, lambda_neg = {lambda_neg}, alpha_parameter = {alpha}')    
+    print(f'Learning rate = {learning_rate}, batch size = {batch_size}, explainer hidden size = {explainer_hidden_size}')
+    print('=========================================================')
 
     for epoch in range(epochs):
         if epoch%15 == 0 and epoch>0: # decrease learning rate every 15 epochs
@@ -368,7 +412,7 @@ def lxr_training(trial):
                          "train/l1_loss": total_l1_loss,
                          "train/epoch": epoch}
 
-        torch.save(explainer.state_dict(), Path(checkpoints_path, f'LXR_{data_name}_{recommender_name}_{trial.number}_{epoch}_{explainer_hidden_size}_{lambda_pos}_{lambda_neg}.pt'))
+        # torch.save(explainer.state_dict(), Path(checkpoints_path, f'LXR_{data_name}_{recommender_name}_{trial.number}_{epoch}_{explainer_hidden_size}_{lambda_pos}_{lambda_neg}.pt'))
 
         #Monitoring on POS metric after each epoch
         explainer.eval()
@@ -397,6 +441,9 @@ def lxr_training(trial):
         wandb.log({**train_metrics, **val_metrics})
         print(f'Finished epoch {epoch} with run_pos_at_20 {last_pos_at_20} and run_neg_at_20 {last_neg_at_20}')
         print(f'Train loss = {train_loss}')
+
+        torch.save(explainer.state_dict(), Path(Neucheckpoints_path, f'{args.whereSaved}/LXR_{data_name}_{recommender_name}_{trial.number}_{epoch}_{explainer_hidden_size}_{lambda_pos}_{lambda_neg}.pt'))
+        print(f'LXR_{data_name}_{recommender_name}_{trial.number}_{epoch}_{explainer_hidden_size}_{lambda_pos}_{lambda_neg}.pt')
         if epoch>=5: # early stop conditions - if both pos@20 and neg@20 are getting worse in the past 4 epochs
             if run_pos_at_20[-2]<run_pos_at_20[-1] and run_pos_at_20[-3]<run_pos_at_20[-2] and run_pos_at_20[-4]<run_pos_at_20[-3]:
                 if run_neg_at_20[-2]>run_neg_at_20[-1] and run_neg_at_20[-3]>run_neg_at_20[-2] and run_neg_at_20[-4]>run_neg_at_20[-3]:

@@ -16,7 +16,7 @@ if __name__ == "__main__":
     data_name = "ML1M" ### Can be ML1M, Yahoo, Pinterest
     DP_DIR = Path("processed_data", data_name) 
     export_dir = Path(os.getcwd())
-    files_path = Path(export_dir.parent, DP_DIR)
+    files_path = Path(export_dir, DP_DIR)
     min_num_of_items_per_user = 2
     min_num_of_users_per_item = 2
 

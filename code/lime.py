@@ -249,7 +249,8 @@ def recommender_run(user_tensor, recommender, item_tensor = None, item_id= None,
 
 def get_lime_args(user_vec, item_id, model, item_tensor, min_pert = 10, max_pert = 20, num_of_perturbations = 5, seed = 0, **kw):
     output_type=kw['output_type']
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #change
+    device = "cpu"
     user_vec[item_id]=0
     neighborhood_data = [user_vec]
     user_tensor =torch.Tensor(user_vec).to(device)

@@ -22,17 +22,31 @@ import ipynb
 import importlib
 import sys
 
+import os,argparse
+parser = argparse.ArgumentParser(description="List files in a directory that start with a given keyword.")
+
+parser.add_argument('--directoryRec', type=str, default="VAE_ML1M_0.0007_128_10.pt", nargs='?')
+parser.add_argument('--directoryLXR', type=str, default="LXR_ML1M_VAE_26_38_128_3.185652725834087_1.420642300151426.pt", nargs='?')
+parser.add_argument('--SizeLXR', type=int, default=128, nargs='?')
+
+# Parse the arguments
+args = parser.parse_args()
+
 data_name = "ML1M" ### Can be ML1M, Yahoo, Pinterest
-recommender_name = "MLP" ### Can be MLP, VAE
+recommender_name = "VAE" ### Can be MLP, VAE, LightGCN
 DP_DIR = Path("processed_data", data_name) 
 export_dir = Path(os.getcwd())
-files_path = Path(export_dir.parent, DP_DIR)
-checkpoints_path = Path(export_dir.parent, "checkpoints")
+files_path = Path(export_dir, DP_DIR)
+# files_path = Path(export_dir.parent, DP_DIR)
+checkpoints_path = Path(export_dir, "checkpoints")
+Neucheckpoints_path = Path(export_dir, "Neucheckpoints")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = 'cpu'
 
 output_type_dict = {
     "VAE":"multiple",
-    "MLP":"single"
+    "MLP":"single",
+    "LightGCN":"single"
 }
 
 num_users_dict = {
@@ -48,36 +62,41 @@ num_items_dict = {
 }
 
 recommender_path_dict = {
-    ("ML1M","VAE"): Path(checkpoints_path, "VAE_ML1M_0.0007_128_10.pt"),
-    ("ML1M","MLP"):Path(checkpoints_path, "MLP1_ML1M_0.0076_256_7.pt"),
+    # ("ML1M","VAE"): Path(checkpoints_path, "VAE_ML1M_0.0007_128_10.pt"),
+    ("ML1M","VAE"): Path(Neucheckpoints_path, args.directoryRec),
+    ("ML1M","MLP"):Path(checkpoints_path, "MLP_ML1M_2_512.pt"),
+    ("ML1M", "LightGCN"): Path(checkpoints_path, "LightGCN_ML1M_iter10k.pt"),
     
     ("Yahoo","VAE"): Path(checkpoints_path, "VAE_Yahoo_0.0001_128_13.pt"),
-    ("Yahoo","MLP"):Path(checkpoints_path, "MLP2_Yahoo_0.0083_128_1.pt"),
+    ("Yahoo","MLP"):Path(checkpoints_path, "5MLP_Yahoo_5_256.pt"),
     
-    ("Pinterest","VAE"): Path(checkpoints_path, "VAE_Pinterest_0.0002_32_12.pt"),
+    ("Pinterest","VAE"): Path(checkpoints_path, "3VAE_Pinterest_2_3_0.0014_128.pt"),
     ("Pinterest","MLP"):Path(checkpoints_path, "MLP_Pinterest_0.0062_512_21_0.pt")
 }
 
 hidden_dim_dict = {
-    ("ML1M","VAE"): [512,128],
-    ("ML1M","MLP"): 32,
+    ("ML1M","VAE"): [256,64], #change from [512,128]
+    ("ML1M","MLP"): 512, #change
+    ("ML1M", "LightGCN"): 64,
     
     ("Yahoo","VAE"): [512,128],
-    ("Yahoo","MLP"):32,
+    ("Yahoo","MLP"):256,
 
-    ("Pinterest","VAE"): [512,128],
+    ("Pinterest","VAE"): [256,64],  #change
     ("Pinterest","MLP"):512,
 
 }
 
 LXR_checkpoint_dict = {
-    ("ML1M","VAE"): ('LXR_ML1M_VAE_26_38_128_3.185652725834087_1.420642300151426.pt',128),
-    ("ML1M","MLP"): ('LXR_ML1M_MLP_12_39_64_11.59908096547193_0.1414854294885049.pt',64),
+    # ("ML1M","VAE"): ('LXR_ML1M_VAE_26_38_128_3.185652725834087_1.420642300151426.pt',128),
+    ("ML1M","VAE"): (args.directoryLXR, args.SizeLXR),
+    ("ML1M","MLP"): ('sel_2_LXR_ML1M_MLP_0_3_32_46.54931757000438_19.14191145091549.pt',32),
+    ("ML1M", "LightGCN"): ('LXR_ML1M_LightGCN_0_1_64_6.820005312417243_26.942911135968924.pt',64),
 
     ("Yahoo","VAE"): ('LXR_Yahoo_VAE_neg-1.5pos_combined_19_26_128_18.958765029913238_4.92235962483309.pt',128),
-    ("Yahoo","MLP"):('LXR_Yahoo_MLP_neg-pos_combined_last_29_37_128_12.40692505393434_0.19367009952856118.pt',128),
+    ("Yahoo","MLP"):('sel_5YahooLXR_Yahoo_MLP_0_39_32_11.107168366441384_7.177773458235631.pt',32),
 
-    ("Pinterest","VAE"): ('LXR_Pinterest_VAE_0_18_64_3.669673618522336_1.7221734058804223.pt',64),
+    ("Pinterest","VAE"): ('sel _ 3LXR_Pinterest_VAE_0_2_128_46.83909560180911_38.999066543680215.pt',128),
     ("Pinterest","MLP"):('LXR_Pinterest_MLP_0_5_16_10.059416809308486_0.705778173474644.pt',16),
 }
 
@@ -103,6 +122,7 @@ items_array = np.eye(num_items)
 all_items_tensor = torch.Tensor(items_array).to(device)
 
 test_array = static_test_data.iloc[:,:-2].to_numpy()
+create_dictionaries = True
 
 with open(Path(files_path, f'jaccard_based_sim_{data_name}.pkl'), 'rb') as f:
     jaccard_dict = pickle.load(f) 
@@ -142,9 +162,7 @@ kw_dict = {'device':device,
 
 # # Recommenders Architecture
 
-from ipynb.fs.defs.recommenders_architecture import *
-importlib.reload(ipynb.fs.defs.recommenders_architecture)
-from ipynb.fs.defs.recommenders_architecture import *
+from recommenders_architecture import *
 
 VAE_config= {
 "enc_dims": hidden_dim,
@@ -194,7 +212,7 @@ class Explainer(nn.Module):
 
 def load_explainer():
     explainer = Explainer(num_items, num_items, lxr_dim)
-    lxr_checkpoint = torch.load(Path(checkpoints_path, lxr_path), map_location=torch.device('cpu'))
+    lxr_checkpoint = torch.load(Path(Neucheckpoints_path, lxr_path), map_location=torch.device('cpu'))
     explainer.load_state_dict(lxr_checkpoint)
     explainer.eval()
     for param in explainer.parameters():
@@ -206,18 +224,16 @@ explainer = load_explainer()
 
 # # Help functions
 
-from ipynb.fs.defs.help_functions import *
-importlib.reload(ipynb.fs.defs.help_functions)
-from ipynb.fs.defs.help_functions import *
+from help_functions import *
 
 # # Baselines functions
 # ### Every function produces explanations for a designated baseline, resulting in a dictionary that maps items from the user's history to their explanation scores based on that baseline.
 
 sys.path.append('../baselines') 
-from ipynb.fs.defs.lime import *
-from ipynb.fs.defs.lime import *
-importlib.reload(ipynb.fs.defs.lime)
-from ipynb.fs.defs.lime import *
+# from ipynb.fs.defs.lime import *
+from lime import *
+# importlib.reload(ipynb.fs.defs.lime)
+# from ipynb.fs.defs.lime import *
 
 lime = LimeBase(distance_to_proximity)
 
@@ -284,7 +300,7 @@ def find_accent_mask(user_tensor, user_id, item_tensor, item_id, recommender_mod
     user_accent_hist = user_tensor.cpu().detach().numpy().astype(int)
 
     #Get topk items
-    sorted_indices = list(get_top_k(user_tensor, user_tensor, recommender_model, **kw_dict).keys())
+    sorted_indices = list(get_top_k(user_tensor, user_tensor, recommender_model, **kw_dict).keys()) #unchange added None 
     
     if top_k == 1:
         # When k=1, return the index of the first maximum value
@@ -326,7 +342,7 @@ def find_shapley_mask(user_tensor, user_id, model, shap_values, item_to_cluster)
        
     for i in np.where(user_vector.astype(int) == 1)[0]:
         items_cluster = item_to_cluster[i]
-        item_shap[i] = shapley_values.T[int(items_cluster)][0]
+        item_shap[i] = shapley_values.mT[int(items_cluster)][0]
  
     return item_shap 
 
@@ -427,7 +443,7 @@ def single_user_metrics(user_vector, user_tensor, item_id, item_tensor, num_of_b
             NEG_masked[j[0]] = 1
         NEG_masked = user_tensor - NEG_masked # remove the masked items from the user history 
         
-        POS_ranked_list = get_top_k(POS_masked, user_tensor, recommender_model, **kw_dict)
+        POS_ranked_list = get_top_k(POS_masked, user_tensor, recommender_model, **kw_dict) #change added none
         
         if item_id in list(POS_ranked_list.keys()):
             POS_index = list(POS_ranked_list.keys()).index(item_id)+1
@@ -466,7 +482,7 @@ def single_user_metrics(user_vector, user_tensor, item_id, item_tensor, num_of_b
         
     return res
 
-create_dictionaries = False # if it is the first time generating the explanations
+create_dictionaries = True # if it is the first time generating the explanations
 
 if create_dictionaries:
     import time
@@ -489,8 +505,8 @@ if create_dictionaries:
             user_vector = test_array[i]
             user_tensor = torch.FloatTensor(user_vector).to(device)
             user_id = int(test_data.index[i])
-
-            item_id = int(get_user_recommended_item(user_tensor, recommender, **kw_dict).detach().cpu().numpy())
+# change : added None to next line arguments
+            item_id = int(get_user_recommended_item(user_tensor, recommender,None, **kw_dict).detach().cpu().numpy())
             item_vector =  items_array[item_id]
             item_tensor = torch.FloatTensor(item_vector).to(device)
 
@@ -532,6 +548,7 @@ def eval_one_expl_type(expl_name):
     '''
     
     print(f' ============ Start explaining {data_name} {recommender_name} by {expl_name} ============')
+    print(f'From file: {recommender_name}_{expl_name}_expl_dict.pkl')
     with open(Path(files_path,f'{recommender_name}_{expl_name}_expl_dict.pkl'), 'rb') as handle:
         expl_dict = pickle.load(handle)
     recommender.eval()
@@ -596,7 +613,7 @@ def eval_one_expl_type(expl_name):
                 print("User {}, total time: {:.2f}".format(i,prev_time - start_time))
 
     a = i+1
-
+    print(f'this experiment is for {recommender_path} and {recommender_name}')
     print(f'users_DEL_{expl_name}: ', np.mean(users_DEL)/a)
     print(f'users_INS_{expl_name}: ', np.mean(users_INS)/a)
     print(f'NDCG_{expl_name}: ', np.mean(NDCG)/a)
@@ -616,7 +633,7 @@ def eval_one_expl_type(expl_name):
     
     print(np.mean(users_DEL)/a , np.mean(users_INS)/a, np.mean(NDCG)/a , np.mean(POS_at_1)/a , np.mean(NEG_at_1)/a, np.mean(POS_at_5)/a , np.mean(NEG_at_5)/a, np.mean(POS_at_10)/a , np.mean(NEG_at_10)/a , np.mean(POS_at_20)/a , np.mean(NEG_at_20)/a, np.mean(POS_at_50)/a , np.mean(NEG_at_50)/a, np.mean(POS_at_100)/a , np.mean(NEG_at_100)/a)
 
-expl_names_list = ['lxr'] # specify the names of the baselines for which you wish to calculate the metrics values.
+expl_names_list = ['lxr','lime','jaccard', 'cosine','shap','accent'] # specify the names of the baselines for which you wish to calculate the metrics values.
 
 for expl_name in expl_names_list:
     eval_one_expl_type(expl_name)

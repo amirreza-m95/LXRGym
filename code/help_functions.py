@@ -111,7 +111,7 @@ def recommender_evaluations(recommender, **kw):
     return counter_10/n, counter_50/n, counter_100/n,  RR/n, PR*100/n
 
 # get user's top recommended item
-def get_user_recommended_item(user_tensor, recommender, **kw):
+def get_user_recommended_item(user_tensor, recommender, user_id= None, **kw):
     all_items_tensor = kw['all_items_tensor']
     num_items = kw['num_items']
     user_res = recommender_run(user_tensor, recommender, all_items_tensor, None, 'vector', **kw)[:num_items]
